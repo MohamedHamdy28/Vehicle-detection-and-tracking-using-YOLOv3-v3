@@ -1,21 +1,15 @@
 # initializing the settings of YOLOv3
 from absl import flags
 import sys
-
-FLAGS = flags.FLAGS
-FLAGS(sys.argv)
-
 import time  # to calculate frames per second
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt  # just for color map
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="-1"  #to make it run on the cpu only
 import tensorflow as tf
 from yolov3_tf2.models import YoloV3
 from yolov3_tf2.dataset import transform_images  # used for resizing our image for the yolo format
 from yolov3_tf2.utils import convert_boxes
-
 from deep_sort import preprocessing
 from deep_sort import nn_matching
 from deep_sort.detection import Detection
@@ -23,6 +17,9 @@ from deep_sort.tracker import Tracker
 from tools import generate_detections as gdet
 
 
+os.environ["CUDA_VISIBLE_DEVICES"]="-1"  #to make it run on the cpu only
+FLAGS = flags.FLAGS
+FLAGS(sys.argv)
 
 class_names = [c.strip() for c in open('./data/labels/coco.names').readlines()]
 yolo = YoloV3(classes=len(class_names))
@@ -37,7 +34,7 @@ encoder = gdet.create_box_encoder(model_filename, batch_size=1)
 metric = nn_matching.NearestNeighborDistanceMetric('cosine', max_cosine_distance, nn_budget)
 tracker = Tracker(metric)
 
-vid = cv2.VideoCapture('D:\learning\Projects\Car detection and tracking using YOLOv3\data\pideo\m.mp4')
+vid = cv2.VideoCapture('D:\learning\Projects\Car detection and tracking using YOLOv3\data\pideo\est.mp4')
 
 codec = cv2.VideoWriter_fourcc(*'DIVX')
 vid_fps = int(vid.get(cv2.CAP_PROP_FPS))
@@ -64,6 +61,7 @@ while True:
     names = []
     for i in range(len(classes)):
         names.append(class_names[int(classes[i])])
+
     names = np.array(names)
     converted_boxes = convert_boxes(img, boxes[0])
     features = encoder(img, converted_boxes)
@@ -90,32 +88,32 @@ while True:
         class_name = track.get_class()
         color = colors[int(track.track_id) % len(colors)]
         color = [i * 255 for i in color]
+        if(class_name=="person"):
+            img = cv2.rectangle(img, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)  # top left, botom right
+            img = cv2.rectangle(img, (int(bbox[0]), int(bbox[1] - 30)), (int(bbox[0]) + (len(class_name) + len(str(track.track_id))) * 17, int(bbox[1])), color, 2)
+            cv2.putText(img, class_name + "-" + str(track.track_id), (int(bbox[0]), int(bbox[1] - 10)), 0, 0.75, (255, 255, 255), 2)
 
-        img = cv2.rectangle(img, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)  # top left, botom right
-        img = cv2.rectangle(img, (int(bbox[0]), int(bbox[1] - 30)), (int(bbox[0]) + (len(class_name) + len(str(track.track_id))) * 17, int(bbox[1])), color, 2)
-        cv2.putText(img, class_name + "-" + str(track.track_id), (int(bbox[0]), int(bbox[1] - 10)), 0, 0.75, (255, 255, 255), 2)
+            center = (int(((bbox[0]) + (bbox[2])) / 2), int(((bbox[1]) + (bbox[3])) / 2))
+            pts[track.track_id].append(center)
 
-        center = (int(((bbox[0]) + (bbox[2])) / 2), int(((bbox[1]) + (bbox[3])) / 2))
-        pts[track.track_id].append(center)
+            for j in range(1, len(pts[track.track_id])):
+                if pts[track.track_id][j - 1] is None or pts[track.track_id][j] is None:
+                    continue
+                thickness = int(np.sqrt(64 / float(j + 1)) * 2)
+                cv2.line(img, (pts[track.track_id][j - 1]), (pts[track.track_id][j]), color, thickness)
 
-        for j in range(1, len(pts[track.track_id])):
-            if pts[track.track_id][j - 1] is None or pts[track.track_id][j] is None:
-                continue
-            thickness = int(np.sqrt(64 / float(j + 1)) * 2)
-            cv2.line(img, (pts[track.track_id][j - 1]), (pts[track.track_id][j]), color, thickness)
-
-        height, width, _ = img.shape
-        cv2.line(img, (0, int(3 * height / 6 + height / 20)), (width, int(3 * height / 6 + height / 20)), (0, 255, 0),
+            height, width, _ = img.shape
+            cv2.line(img, (0, int(3 * height / 6 + height / 20)), (width, int(3 * height / 6 + height / 20)), (0, 255, 0),
                  thickness=2)
-        cv2.line(img, (0, int(3 * height / 6 - height / 20)), (width, int(3 * height / 6 - height / 20)), (0, 255, 0),
+            cv2.line(img, (0, int(3 * height / 6 - height / 20)), (width, int(3 * height / 6 - height / 20)), (0, 255, 0),
                  thickness=2)
 
-        center_y = int(((bbox[1]) + (bbox[3])) / 2)
+            center_y = int(((bbox[1]) + (bbox[3])) / 2)
 
-        if center_y <= int(3 * height / 6 + height / 20) and center_y >= int(3 * height / 6 - height / 20):
-            if class_name == 'truck' or class_name == 'car':
-                counter.append(int(track.track_id))
-                current_count += 1
+            if center_y <= int(3 * height / 6 + height / 20) and center_y >= int(3 * height / 6 - height / 20):
+                if class_name == 'truck' or class_name == 'car':
+                    counter.append(int(track.track_id))
+                    current_count += 1
 
     total_count = len(set(counter))
     cv2.putText(img, "Current Vehicle Count: " + str(current_count), (0, 80), 0, 1, (0, 0, 255), 2)
